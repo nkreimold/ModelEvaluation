@@ -1,0 +1,233 @@
+---
+title: "Data Quality Report"
+author: "by Nicholas Reimold - `r format(Sys.time(), '%B %d, %Y  %I:%M %p')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+params:
+    pathMaster: "C:/Users/A4034/Desktop/ModelEvaluation/NewFolder/"
+    cutoffdate: "NO"
+---
+
+<style>
+#TOC {
+  top: 1%;
+  opacity: 0.5;
+}
+#TOC:hover {
+  opacity: 1;
+}
+#TOC::before {
+  content: "";
+  display: block;
+  height: 200px;
+  margin: 2em 20px 40px 20px;
+  background-image: url("InformationalPlots/CPALogo.png");
+  background-size: contain;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+body .main-container {
+max-width: 1800px;
+}
+</style>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(survival)
+library(data.table)
+library(dplyr)
+library(pROC)
+library(splitstackshape)
+library(kableExtra)
+library(lubridate)
+library(rmarkdown)
+library(funModeling)
+library(formattable)
+library(dlookr)
+library(knitr)
+
+options("scipen"=999)
+pathMaster <- params$pathMaster
+cutoff <- params$cutoffdate
+
+DataDict=read.csv(paste0(pathMaster,"DataDictionary.csv"))
+load(paste0(pathMaster,"RawModelData.RData"))
+```
+
+
+
+
+# Missing and Unique Values
+***
+```{r,results='asis',layout="l-body-outset",echo=FALSE,message=FALSE,warning=FALSE}
+
+table_missing%>%mutate(     missing_percent = ifelse(missing_percent > 0,
+                  cell_spec(paste0(missing_percent,"%"), color = "red", bold = T),
+                  cell_spec(paste0(missing_percent,"%"), color = "black", italic = F)),
+                 
+                 outlier = ifelse(outlier > 20,
+                  cell_spec(paste0(outlier,"%"), color = "black", bold = T),
+                  cell_spec(paste0(outlier,"%"), color = "black", italic = F)),
+                 zero = ifelse(zero > 20,
+                  cell_spec(paste0(zero,"%"), color = "black", bold = T),
+                  cell_spec(paste0(zero,"%"), color = "black", italic = F)),
+                                 minus = ifelse(minus > 20,
+                  cell_spec(paste0(minus,"%"), color = "black", bold = T),
+                  cell_spec(paste0(minus,"%"), color = "black", italic = F))
+                
+                
+                )%>%rename(Type=VarType,
+                           `Missing Pct`=missing_percent,
+                           `Unique Count`=unique_count,
+                           `Outlier Pct`=outlier,
+                           `Negative Pct`=minus,
+                           `Zero Pct`=zero
+                           )%>%
+  kable(escape = F) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12)
+
+
+```
+***
+# Summary Statistics
+***
+```{r,results='asis',echo=FALSE,fig.align='center',message=FALSE,warning=FALSE}
+
+kable(table_summary) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"),font_size = 12)
+
+```
+***
+# Categorical Breakdown {#buttons .tabset .tabset-fade .tabset-pills}
+***
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+
+#table_namescategorical
+
+for(j in 1:length(table_namescategorical)){
+
+  cat('\n##', table_namescategorical[j], '\n')
+  
+tab=get(paste0("table_cat_",j))
+print(kable(tab, caption = DataDict%>%filter(Description==table_namescategorical[j])%>%.$Variable) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12))
+ 
+ 
+  cat('\n')
+}
+
+
+```
+
+
+
+# Histograms {#buttons .tabset .tabset-fade .tabset-pills}
+***
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+
+for(j in 1:length(table_nameshistogram)){
+
+cat('\n##', table_nameshistogram[j], '\n')
+ path=paste0(pathMaster,'Histogram_',j)
+    cat(paste0("![](", path, ".png)"), "\n")
+}
+```
+
+***
+
+***
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+
+if(cutoff=="YES"&exists("table_psi_names") ){
+  
+cat("\n# PSI {#buttons .tabset .tabset-fade .tabset-pills}","\n")
+cat("The population stability index(PSI) is a metric that represents how much a variable's distribution has shifted between two samples over time. ","\n")
+
+
+table_psi_names=get(paste0("table_psi_names"))
+
+## First
+
+for(j in 1:length(table_psi_names)){
+cat('\n##', table_psi_names[j], '\n')
+
+
+tab=get(paste0("table_psi_",j))
+
+tab=  tab %>%mutate(     Index = ifelse(Index > .1,
+                                          cell_spec(paste0(Index), color = "red", bold = T),
+                                          cell_spec(paste0(Index), color = "black", italic = F)))%>%
+  kable(escape = F) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12)
+print(tab)
+
+cat('\n')
+
+
+}
+}
+```
+
+
+***
+
+```{r,results='asis',  layout="l-body-outset",echo=FALSE,message=FALSE,warning=FALSE,fig.height=8,fig.width=12}
+#table_nameshistogram
+
+if(DateName!=""){
+cat("\n#Trended Categorical {#buttons .tabset .tabset-fade .tabset-pills}","\n")
+
+
+for(j in 1:length(table_namescategorical)){
+# plot
+  
+    cat('\n##', table_namescategorical[j], '\n')
+   path=paste0(pathMaster,'CatTrended_',j)
+    cat(paste0("![](", path, ".png)"), "\n")
+cat('\n')
+
+}
+}
+```
+
+***
+
+
+```{r,results='asis',  layout="l-body-outset",echo=FALSE,message=FALSE,warning=FALSE,fig.height=8,fig.width=12}
+#table_nameshistogram
+if(DateName!=""){
+cat("\n#Trended Numerical {#buttons .tabset .tabset-fade .tabset-pills}","\n")
+
+
+for(j in 1:length(table_numerical_trended_names)){
+# plot
+  
+    cat('\n##', table_numerical_trended_names[j], '\n')
+   path=paste0(pathMaster,'NumTrended_',j)
+    cat(paste0("![](", path, ".png)"), "\n")
+
+cat('\n')
+
+}
+}
+```
+
+# Correlation Plot of Numerical Variables
+
+
+```{r,results='asis',  layout="l-body-outset",echo=FALSE,message=FALSE,warning=FALSE,fig.height=8,fig.width=12}
+if (table_plot_corr=="YES") {
+   path=paste0(pathMaster,'CORR')
+    cat(paste0("![](", path, ".png)"), "\n")
+  
+} else {
+  cat("Number of numerical variables is less than 2.\n\n")
+}  
+```

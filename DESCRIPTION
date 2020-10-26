@@ -1,0 +1,57 @@
+Package: ModelEvaluation
+Type: Package
+Title: Tools for Data Quality, Model Evaluation
+Version: 0.1.1
+Authors@R: c(
+  person("Reimold", "Nicholas",, "nkreimold@gmail.com", role = c("aut", "cre"))
+  )
+Description: A collection of tools that support data diagnosis, exploration, and evaluation. 
+    Data quality provides information and visualization of missing values and distributions and 
+    unique and negative values to help you understand the distribution and quality of your data. 
+    Model evaluation provides information about the success rates of your model and the relationship
+    between different predictors. It creates automated reports that support these tasks.
+License: GPL-2 | file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends:
+    R (>= 3.2.0),
+    dlookr,
+    pROC,
+    lubridate,
+    kableExtra,
+    funModeling,
+    formattable,
+    knitr,
+    tidyverse,
+    hrbrthemes,
+Imports:     dlookr,
+    lubridate,
+    tidyr,
+    ggplot2,
+    RcmdrMisc,
+    corrplot,
+    rlang,
+    tibble,
+    tidyselect,
+    classInt,
+    moments,
+    kableExtra,
+    smbinning,
+    xtable,
+    knitr,
+    rmarkdown,
+    RColorBrewer,
+    gridExtra,
+    tinytex,
+    methods,
+    DMwR,
+    rpart,
+    cli,
+    car,
+    broom
+Suggests: nycflights13,
+Author: Nicholas Reimold [aut, cre]
+Maintainer: Nicholas Reimold <choonghyun.ryu@gmail.com>    
+BugReports: https://github.com/nkreimold/ModelEvaluation/issues
+VignetteBuilder: knitr    
+RoxygenNote: 7.1.0

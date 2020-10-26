@@ -1,0 +1,402 @@
+---
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+params:
+    pathMaster: "S:/30000/Credit Policy/Nicholas/GitHub/CECL/CECL_CL_PD_EAD/ModelEval/Report Objects/UNSECURED120/"
+---
+
+<style>
+#TOC {
+top: 1%;
+opacity: 0.5;
+}
+#TOC:hover {
+opacity: 1;
+}
+#TOC::before {
+content: "";
+display: block;
+height: 200px;
+margin: 2em 20px 40px 20px;
+background-image: url("InformationalPlots/CPALogo.png");
+background-size: contain;
+background-position: center center;
+background-repeat: no-repeat;
+}
+body .main-container {
+max-width: 1800px;
+}
+</style>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(survival)
+library(data.table)
+library(dplyr)
+library(pROC)
+library(splitstackshape)
+library(kableExtra)
+library(lubridate)
+library(rmarkdown)
+library(funModeling)
+library(formattable)
+library(dlookr)
+library(knitr)
+
+options("scipen"=999)
+modelPerf_path <- params$pathMaster
+
+load(paste0(modelPerf_path,"PerformanceTables.RData"))
+if(!file.exists(paste0(modelPerf_path,"Coefficients.RData"))){
+  runXVAL="NO"
+}else{
+  load(paste0(modelPerf_path,"Coefficients.RData"))
+  runXVAL="YES"
+}
+crit1=0.95
+crit2=1.05
+```
+
+
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+author_var='by Maggie Zhu'
+
+title_var <- paste0("Model Performance Report") 
+date_var <- format(Sys.time(), '%B %d, %Y  %I:%M %p');#"%a %b %d %X %Y %Z");
+author_date_var <- paste0(author_var, ' - ', date_var)
+```
+
+---
+title: `r title_var`
+author: `r author_date_var`
+---
+
+#   PD K-fold Cross Validation 
+In each fold of cross-validation, the sampled data are partitioned into training set and testing set. The analysis is on the training set, and validating the analysis on the testing set. The data partitions are different across the folds. The aim is to derive a more stable and accurate estimate of model prediction performance
+
+##   PD Model Coefficients / Significance
+`r text_spec("XXXX", background = 'lightgray', color = "lightgray", bold = T)`
+Coefficient NOT significant ($\alpha$=0.05)       
+`r text_spec("XXXX", background = "white", color = "red", bold = T)`
+Fold coefficent $\ge$ 5% different from `coef_All`        
+
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+if(  runXVAL!="NO"){
+  
+  if(exists("pd_coef_sigout_CF")){
+    cat("Charge Off")
+    print(pd_coef_sigout_CF)
+  }
+  if(exists("pd_coef_sigout_PF")){
+        cat("Prepayment")
+    print(pd_coef_sigout_PF)
+  }else{
+    print(pd_coef_sigout)
+  }
+}
+```
+
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+if(  runXVAL!="NO"){
+  cat("\n## Concordance {#buttons .tabset .tabset-fade .tabset-pills}","\n")
+  cat("Concordance is the fraction of pairs in the data, where the observation with the higher survival time has the higher probability of survival predicted by the model.","\n")
+  
+  if(exists("concordance_CF")){
+    Concordance=concordance_CF
+  }else{
+        Concordance=concordance
+  }
+  names(Concordance)[1:(ncol(Concordance)-1)]=1:(ncol(Concordance)-1)
+  #coerce to numeric
+  for(j in 2:ncol(Concordance)){
+      Concordance[,j]=as.numeric(  Concordance[,j])
+
+  }
+  Concordance=round(Concordance,3)
+  
+  c=kable(Concordance) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12)
+    cat('\n')
+cat("Charge Off")
+
+  print(c)
+  cat('\n')
+  
+  
+  
+  if(exists("concordance_PF")){
+    Concordance=concordance_PF
+  
+  
+  names(Concordance)[1:(ncol(Concordance)-1)]=1:(ncol(Concordance)-1)
+  #coerce to numeric
+  for(j in 2:ncol(Concordance)){
+      Concordance[,j]=as.numeric(  Concordance[,j])
+
+  }
+  Concordance=round(Concordance,3)
+  
+  c=kable(Concordance) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12)
+      cat("Prepayment")
+  print(c)
+  cat('\n')
+  
+  }
+}
+```
+
+***
+## Recalibration {#buttons .tabset .tabset-fade .tabset-pills}
+For competing risk events (where the outcomes can be of more than 2 cagetories, such as default, active and prepaid), by aalen-johansen estimate, the probability of default could be over 1.0. Further recalibration is made with logistic regression modeling.
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+if(exists("table_cal.model_coef")) {
+  cal.model_coef= table_cal.model_coef
+  cal.model_coef_heat=cal.model_coef%>%select(Variable,Description, Estimate, is_Significant)
+  
+  cal.model_coef_heat$is_Significant=ifelse(cal.model_coef_heat$is_Significant==FALSE,   
+                                            cell_spec(cal.model_coef_heat$is_Significant, color='red'),
+                                            cal.model_coef_heat$is_Significant)
+  cal.model_coef_heat=cal.model_coef_heat%>%
+    kable(escape = F) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12)
+  print(cal.model_coef_heat)
+}        
+```
+
+# PD Model Discrimination
+***
+## KS Tables  {#buttons .tabset .tabset-fade .tabset-pills .columnsection}
+***
+KS--The maximum separation between the percentage of events captured and percentage of non-events captured by the model in cumulative distributions of events and non-events. Values range from 0-1. Marked as 
+`r text_spec("red ", background = "white", color = "red", bold = T)`
+in the table, if any. 
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+#load(paste0(modelPerf_path,"KS_tbl_heatmaps.RData"))
+for(timeWD in 1:forecast.window){#cat('timeWD=',timeWD,'\t')
+  KS_tbl=table_KS_alltimes%>%filter(Time==timeWD)
+  if(nrow(KS_tbl)>0){
+    KS_tbl$cumulative_co_rate=pmin(100,KS_tbl$cumulative_co_rate)
+    KS_tbl$cumulative_non_co_rate=pmin(100,KS_tbl$cumulative_non_co_rate)
+    isMax=KS_tbl$KS==KS_tbl$KS_Max
+    KS_tbl_heat=KS_tbl%>%select(-tt_co_1,-tt_co_0,-KS_Max)
+    names(KS_tbl_heat)=c('DecileDown','Number of Chargedoff Accounts','Total Accounts' ,'Number of Non-Chargedoff Accounts', 'DecileUp', 'Chargedoff Rate', 'Cumulative Chargedoff Rate','Non-Chargedoff Rate','Cumulative Non-Chargedoff Rate','KS','Time')
+    
+    KS_tbl_heat$KS=round(KS_tbl_heat$KS,2)
+    KS_tbl_heat$KS=ifelse(isMax==TRUE, cell_spec(KS_tbl_heat$KS, color='red'),KS_tbl_heat$KS)
+    KS_tbl_heat=KS_tbl_heat%>%
+      kable(escape = F) %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12)
+    
+    cat('\n###', paste0(timeWD), '\n')
+    
+    print(KS_tbl_heat)
+    
+    cat('\n') 
+  } 
+} 
+
+```
+
+
+***
+## KS Plots  {#buttons .tabset .tabset-fade .tabset-pills .columnsection}
+***
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+for(j in (1:ceiling(forecast.window/6))*6){
+  path=paste0(modelPerf_path,'PD_g_KS_',j,".png")
+  if(file.exists(path)){
+    cat('\n###', j, '\n')
+    cat(paste0("![](", path, ")"), "\n")
+  }
+}
+```
+
+***
+## Gini Curve/Lorenz Curve {#buttons .tabset .tabset-fade .tabset-pills .columnsection}
+***
+Gini--Area under Gini Curve/Lorenz Curve of model as compared to the perfect model, or one that would capture 100% of events in the first score bucket / decile. Values ranging from 0-1.         
+
+$$Gini=2×ROC-1$$  
+
+Pietra Index--The maximum vertical distance between the model Lorenz Curve and the line representing a random decision rule. This distance may be interpreted as the maximum 'lift' over random provided by the model. 
+
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+cat('<div class = "row">','\n')
+for(j in 1:2){
+  path=paste0(file.path(modelPerf_path,'PD_gini'),j,"_12", ".png")
+if(file.exists(path)){
+  cat('<div class = "col-md-6">', '\n')
+  cat(paste0("![](", path,")"), "\n")
+  cat("</div>","\n")
+}
+}
+cat("</div>","\n")
+```
+
+***
+## ROC Curve {#buttons .tabset .tabset-fade .tabset-pills}
+***
+ROC (Receiver Operating Characteristic) curve is a performance measurement for classification problem at various thresholds settings. AUC - Area Under the Curve. 
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+TimeWD_all=table_TimeWD_all
+for(j in c((1:ceiling(forecast.window/6))*6,TimeWD_all)){
+  path=paste0(modelPerf_path,'PD_g_roc_auc_',j,'.png')
+  
+  if(file.exists(path)){
+    
+    cat('\n###', j, '\n')
+    cat(paste0("![](", path, ")"), "\n")
+  }
+  
+}
+```
+
+# PD Backtesting by Bucket 
+***
+## Time Point  {#buttons .tabset .tabset-fade .tabset-pills .columnsection}
+***
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+files=list.files(modelPerf_path)[grepl("g_PD_Bucket_AVG_",list.files(modelPerf_path))]
+ct2=files%>%strsplit("g_PD_Bucket_AVG_")%>%data.frame(stringsAsFactors = F)
+ct2=ct2[2,]%>%as.character()%>%strsplit(".png")%>%data.frame(stringsAsFactors = F)%>%as.character()
+
+ct2=c("Time",ct2[!ct2%in%"Time"])
+
+for(ct in ct2){
+  #ct_desc=ifelse(ct=='Time', 'Time',catListDesc[match(ct,catList)])
+  ct_desc=catListDesc[match(ct,catList)]
+  cat('\n###', ct_desc, '\n')
+  
+  cat('<div class = "row">','\n')
+  
+  cat('<div class = "col-md-6">', '\n')    
+  path=paste0(modelPerf_path,'g_PD_Bucket_AVG_',ct)
+  cat(paste0("![](", path, ".png)"), "\n")
+  cat("</div>","\n")
+  
+  cat('<div class = "col-md-6">', '\n')    
+  path=paste0(modelPerf_path,'g_Actual_D_Pct_Bucket_',ct)
+  cat(paste0("![](", path, ".png)"), "\n")
+  cat("</div>","\n")
+  
+  cat("</div>","\n")
+}
+```
+
+***
+## Aggregate   {#buttons .tabset .tabset-fade .tabset-pills}
+***
+
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+#aggregate
+#cat('<div class = "row">','\n')
+files=ls()[grepl("table_PD_bucket_out_agg_",ls())]
+
+for(f in files){
+  bucket_out_agg=get(f)
+  bucket_out_agg=bucket_out_agg%>%
+    mutate(PD_AVG=round(PD_AVG,4), PD_SUM=round(PD_SUM,2), Percent_Default=round(Percent_Default,4), pd_err_r_pct=round(pd_err_r_pct,2) )%>%rename('Predicted Default Average'='PD_AVG', 'Predicted Default Sum'='PD_SUM','Default Number'='PD_Nbr','Account Number'='Account_Nbr', 'Percent of Default'='Percent_Default', 'Predicted Default Error Rate'='pd_err_r_pct')%>%select(-Diff_pct)
+  
+  ct=f%>%strsplit("table_PD_bucket_out_agg_")%>%.[[1]]%>%.[2]
+  if(!ct%in%c("Time","all")){
+    ct_desc=catListDesc[match(ct,catList)]
+    
+    cat('\n###', ct_desc, '\n')
+    
+    print(kable(bucket_out_agg) %>%
+            kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12))
+    
+    cat('\n')
+  }
+}
+
+``` 
+
+
+***
+## PD Final  {#buttons .tabset .tabset-fade .tabset-pills}
+***
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+PD_Error_final=table_PD_Error_final
+PD_Error_final=
+  PD_Error_final%>%rename('Predicted Default Average'='PD_AVG', 'Predicted Default Sum'='PD_SUM','Default Number'='PD_Nbr','Account Number'='Account_Nbr', 'Percent of Default'='Percent_Default', 'Predicted Default Error Rate'='pd_err_r_pct')
+
+print(kable(PD_Error_final) %>%
+        kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12))
+
+cat('\n')
+
+```
+
+
+
+# Loss Forecast Backtesting 
+
+***
+## Time Point  {#buttons .tabset .tabset-fade .tabset-pills .columnsection}
+***
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+
+files=ls()[grepl("table_Loss_ErrorRate_bucket_",ls())]
+files=c("table_Loss_ErrorRate_bucket_Time",files[!files%in%"table_Loss_ErrorRate_bucket_Time"])
+
+
+
+for(ct in files){
+  ErrorRate_bucket=get(ct)
+  ErrorRate_bucket=ErrorRate_bucket%>%rename('Number of Accounts'='Accounts', 'Number of Chargedoff Accounts'='CO_1_sum', 'Preded Losses'='Pred.Losses', 'Actual Losses'='Actual.Losses', 'Loss Error Rate'='Error')
+  
+  ct2=ct%>%strsplit("table_Loss_ErrorRate_bucket_")%>%.[[1]]%>%.[2]
+  
+  ct_desc=ifelse(ct=='Time','Time', catListDesc[match(ct2,catList)])
+  cat('\n###', ct_desc, '\n')
+  
+  print(kable(ErrorRate_bucket) %>%
+          kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12))
+  
+  cat('\n')
+  
+}
+``` 
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+if(exists("table_Loss_ErrorRate")){
+  cat("\n## Aggregate Loss","\n")
+  
+  path=paste0(modelPerf_path,'g_DollarLoss')
+  cat(paste0("![](", path, ".png)"), "\n")
+}
+```  
+
+***
+***
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE}
+if(exists("table_Loss_ErrorRate")){
+  cat("\n## Loss Error Rate {#buttons .tabset .tabset-fade .tabset-pills}","\n")
+  
+  
+  
+  ErrorRate=table_Loss_ErrorRate
+  ErrorRate=ErrorRate%>%rename('Number of Accounts'='Accounts','Preded Losses'='Pred.Losses','Actual Losses'='Actual.Losses','Loss Error Rate'='Error')
+  
+  print(kable(ErrorRate) %>%
+          kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12))
+  
+  cat('\n')
+}
+```

@@ -1,0 +1,311 @@
+---
+title: "Forecasting Report"
+author: "by Nicholas Reimold - `r format(Sys.time(), '%B %d, %Y  %I:%M %p')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+params:
+    pathMaster:  "C:/Users/A4034/Desktop/ModelEvaluation/NewFolder"
+---
+
+<style>
+#TOC {
+  top: 1%;
+  opacity: 0.5;
+}
+#TOC:hover {
+  opacity: 1;
+}
+
+body .main-container {
+max-width: 1800px;
+}
+</style>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(plotly)
+library(xfun)
+library(data.table)
+library(dplyr)
+library(pROC)
+library(splitstackshape)
+library(kableExtra)
+library(lubridate)
+library(rmarkdown)
+library(funModeling)
+library(formattable)
+library(dlookr)
+library(knitr)
+library(shiny)
+
+options("scipen"=999)
+pathMaster <- params$pathMaster
+
+
+load(file.path(pathMaster,"ForecastMetricData.RData"))
+```
+
+
+
+
+# Methodology
+***
+```{r,results='asis',layout="l-body-outset",echo=FALSE,message=FALSE,warning=FALSE}
+
+format.money  <- function(x, ...) {
+    paste0("$", formatC(as.numeric(x), format="f", digits=0, big.mark=","))
+}
+
+DES=NULL
+for (j in 1:length(RESULTS)){
+xx=RESULTS[[j]]%>%group_by(Window,Prod)%>%summarise(
+                                   Accounts=sum(Accounts),
+                                   Pred.Losses=sum(Pred.Losses))%>%mutate(DQ.Status="Overall")
+
+DES=DES%>%rbind(DescriptionDF%>%mutate(Losses=xx$Pred.Losses[1],ScenarioID=j))
+}
+DES%>%
+  kable(escape = F) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),font_size = 12)
+```
+
+
+
+***
+# Total Losses by Scenario  {#buttons .tabset .tabset-fade .tabset-pills}
+***
+
+```{r,results='asis',echo=FALSE,fig.align='center',message=FALSE,warning=FALSE}
+
+DES=NULL
+for (j in 1:length(RESULTS)){
+xx=RESULTS[[j]]%>%group_by(Window,Prod)%>%summarise(
+                                   Accounts=sum(Accounts),
+                                   Pred.Losses=sum(Pred.Losses),
+                                   Balance=sum(Balance))%>%mutate(CoverageRatio=Pred.Losses/Balance,DQ.Status="Overall")
+
+RESULTS2=RESULTS[[j]]%>%mutate(CoverageRatio=Pred.Losses/Balance)%>%full_join(xx)%>%
+  mutate(Pred.Losses=format.money(Pred.Losses),
+         Balance=format.money(Balance),ScenarioID=j)
+
+names(RESULTS2)<-c("Window","Product","DQ Status","Number of Accounts","Predicted Losses","ScenarioID")
+
+ cat('\n## ID = ', j, '\n')
+
+R=kable(RESULTS2) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"),font_size = 12)
+print(R)
+}
+
+
+```
+
+
+# Losses over Time {#buttons .tabset .tabset-fade .tabset-pills .columnsection}
+***
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE,eval=TRUE}
+titles=c("Time Point Loss","Cumulative Loss")
+plotlist=list()
+for(j in 1:2){
+      DF=NULL
+
+  for(qq in 1:length(OverallTimePoint)){
+    a=OverallTimePoint[[qq]]%>%group_by(Time)%>%summarise(Pred.Loss=sum(Pred.Loss/1000000))
+    if(j==2){
+      a=a%>%mutate(Pred.Loss=cumsum(a$Pred.Loss))
+    }
+    names(a)[2]<-paste0("ID=",qq)
+    if(is.null(DF)){
+      DF=a
+    }else{DF=DF%>%full_join(a)}
+  }
+      
+d=reshape2::melt(DF,id="Time")%>%rename(Scenario=variable)
+  p<-ggplot(d, aes(x=Time, y=value, group=Scenario, color=Scenario)) +
+    geom_line()+
+    # geom_point(aes(color="#e9ecef"))+ 
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size=20),
+      axis.text=element_text(size=12),
+      axis.title = element_text(size=15)
+    )+ #theme(legend.position="none")+
+    ggtitle(titles[j])+labs(y="Predicted Losses(Millions)",x="Months afer Snapshot")
+                   plotlist[[j]]=ggplotly(p ,tooltip=c("Time","value","Scenario"))
+}
+htmltools::tagList(setNames(plotlist,NULL))
+
+
+```
+
+# Losses By Bucket {#buttons .tabset .tabset-fade .tabset-pills .columnsection}
+***
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE,eval=TRUE}
+titles=c("Time Point Loss")
+plotlist=list()
+for(j in 1){
+      DF=NULL
+
+  for(qq in 1:length(OverallTimePoint)){
+    a=OverallTimePoint[[qq]]%>%group_by(Time,DQ.Status)%>%summarise(Pred.Loss=sum(Pred.Loss/1000000))
+    if(j==2){
+      a=a%>%mutate(Pred.Loss=cumsum(a$Pred.Loss))
+    }
+    names(a)[3]<-paste0("ID=",qq)
+    if(is.null(DF)){
+      DF=a
+    }else{DF=DF%>%full_join(a)}
+  }
+      
+d=reshape2::melt(DF,id=c("Time","DQ.Status"))%>%rename(Scenario=variable)%>%mutate(IDVAR=paste(Scenario,DQ.Status,sep="_"))
+  p<-ggplot(d, aes(x=Time, y=value, group=IDVAR, color=IDVAR)) +
+    geom_line()+
+    # geom_point(aes(color="#e9ecef"))+ 
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size=20),
+      axis.text=element_text(size=12),
+      axis.title = element_text(size=15)
+    )+ #theme(legend.position="none")+
+    ggtitle(titles[j])+labs(y="Predicted Losses(Millions)",x="Months afer Snapshot")
+                   plotlist[[j]]=ggplotly(p ,tooltip=c("Time","value","Scenario"))
+}
+htmltools::tagList(setNames(plotlist,NULL))
+
+
+```
+
+# Losses Rates By Bucket {#buttons .tabset .tabset-fade .tabset-pills .columnsection}
+***
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE,eval=TRUE}
+titles=c("Loss Rate By Bucket")
+plotlist=list()
+for(j in 1){
+      DF=NULL
+
+  for(qq in 1:length(OverallTimePoint)){
+    a=OverallTimePoint[[qq]]%>%group_by(Time,DQ.Status)%>%summarise(Pred.Loss=sum(Pred.Loss),EAD=sum(EAD))
+    if(j==2){
+      a=a%>%mutate(Pred.Loss=cumsum(a$Pred.Loss))
+    }
+    
+    if(is.null(DF)){
+      DF=a
+    }else{DF=DF%>%full_join(a)}
+  }
+      
+            DF2=NULL
+
+    DF2=HistoricalCurve%>%group_by(Time,DQ.Status)%>%summarise(Pred.Loss=sum(CO),EAD=sum(CO=sum(BAL)))%>%mutate(PCT=100*Pred.Loss/EAD)%>%select(-Pred.Loss,-EAD)
+           names(DF2)[3]<-paste0("HistoricalRates")
+
+        
+            
+      DF=DF%>%mutate(PCT=100*Pred.Loss/EAD)%>%select(-Pred.Loss,-EAD)
+       names(DF)[3]<-paste0("ID=",qq)
+       DF=DF%>%left_join(DF2)
+       DF[is.na(DF)]=0
+   
+d=reshape2::melt(DF,id=c("Time","DQ.Status"))%>%rename(Scenario=variable)%>%mutate(IDVAR=paste(Scenario,DQ.Status,sep="_"))
+  p<-ggplot(d, aes(x=Time, y=value, group=IDVAR, color=IDVAR)) +
+    geom_line()+
+    # geom_point(aes(color="#e9ecef"))+ 
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size=20),
+      axis.text=element_text(size=12),
+      axis.title = element_text(size=15)
+    )+ #theme(legend.position="none")+
+    ggtitle(titles[j])+labs(y="Loss Rate(%)",x="Months afer Snapshot")
+                   plotlist[[j]]=ggplotly(p ,tooltip=c("Time","value","Scenario"))
+}
+htmltools::tagList(setNames(plotlist,NULL))
+
+
+
+```
+
+
+
+
+***
+
+# Loss Rates {#buttons .tabset .tabset-fade .tabset-pills .columnsection}
+***
+
+
+```{r,results='asis',echo=FALSE,message=FALSE,warning=FALSE,eval=TRUE}
+titles=c("Historical Loss Rate","Forecasted Loss Rate")
+xlabs=c("Date","Months afer Snapshot")
+plotlist=list()
+
+for(j in 1:2){
+  
+if(j==1){
+     a=Total%>%na.omit()%>%rename(Time=Date)
+           p<-ggplot(a, aes(x=Time, y=Loss_Rate)) +
+        geom_line(aes(color="#69b3a2"))+
+       # geom_point(aes(color="#e9ecef"))+ 
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size=20),
+          axis.text=element_text(size=12),
+          axis.title = element_text(size=15)
+        )+ theme(legend.position="none")+
+                ggtitle(titles[j])+
+               labs(y="Forecasted Loss Rate(%)",x=xlabs[j])
+
+                         plotlist[[j]]=ggplotly(p,tooltip =c("Time","Loss_Rate") )
+
+
+}else{
+     DF=NULL
+
+  for(qq in 1:length(OverallTimePoint)){
+     a=OverallTimePoint[[qq]]%>%group_by(Time)%>%summarise(Pred.Loss=sum(Pred.Loss),EAD=sum(EAD),Loss_Rate=100*Pred.Loss/EAD)%>%select(Time,Loss_Rate)
+    
+    names(a)[2]<-paste0("ID=",qq)
+    if(is.null(DF)){
+      DF=a
+    }else{DF=DF%>%full_join(a)
+    }
+    
+  }
+     
+         
+d=reshape2::melt(DF,id="Time")%>%rename(Scenario=variable)
+  p<-ggplot(d, aes(x=Time, y=value, group=Scenario, color=Scenario)) +
+    geom_line()+
+    # geom_point(aes(color="#e9ecef"))+ 
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size=20),
+      axis.text=element_text(size=12),
+      axis.title = element_text(size=15)
+    )+ ggtitle(titles[j])+
+               labs(y="Forecasted Loss Rate(%)",x=xlabs[j])
+                   plotlist[[j]]=ggplotly(p ,tooltip=c("Time","value","Scenario"))
+
+}
+   
+   
+
+
+
+
+}
+htmltools::tagList(setNames(plotlist,NULL))
+
+
+```
+
+
+
